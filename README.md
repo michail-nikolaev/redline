@@ -321,6 +321,8 @@ Status line only:
         │   └── plugin.json        # plugin manifest
         ├── commands/
         │   └── redline-statusline.md   # /redline-statusline setup command
+        ├── skills/
+        │   └── redline/SKILL.md        # how to read an injected user-edit diff
         ├── hooks/
         │   ├── hooks.json         # wires the four lifecycle hooks
         │   ├── lib.sh             # shared helpers
