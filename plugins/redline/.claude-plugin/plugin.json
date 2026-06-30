@@ -1,0 +1,17 @@
+{
+  "name": "redline",
+  "version": "0.9.0",
+  "description": "Feeds your manual working-tree edits made between agent turns back to Claude as a git diff, and shows them live in the status bar. Safe for multiple concurrent sessions.",
+  "author": {
+    "name": "you"
+  },
+  "keywords": [
+    "hooks",
+    "git",
+    "diff",
+    "statusline",
+    "workflow",
+    "human-in-the-loop"
+  ],
+  "license": "MIT"
+}
