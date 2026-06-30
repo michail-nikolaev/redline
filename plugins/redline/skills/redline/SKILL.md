@@ -5,8 +5,10 @@ description: How to read the "user edited files between turns" git diff that red
 
 # Reading a redline user-edit diff
 
-Redline injects a `git diff` of the files the **user** changed by hand in the
-working tree since your previous turn. When you see one:
+Redline injects a diff of the files the **user** changed by hand in the working
+tree since your previous turn. It looks like `git diff` output but isn't one —
+it's emulated against a private snapshot taken at the end of your last turn, not
+against `HEAD`. When you see one:
 
 - These are the user's **deliberate** edits. Treat them as intentional and build
   on them — do not revert or "fix" them back unless asked.
