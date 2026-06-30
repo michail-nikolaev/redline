@@ -8,6 +8,48 @@ This plugin makes the awareness explicit and proactive: whenever you edit files
 yourself between the agent's turns, the next prompt carries a diff of exactly
 what you changed into Claude's context.
 
+## Install
+
+### 1. Install the plugin
+
+**Option A — skills-directory plugin (simplest, has a toggle).** Clone the repo
+and drop the plugin folder into your skills directory; it is picked up with no
+marketplace step:
+
+```bash
+git clone https://github.com/michail-nikolaev/redline.git
+cp -r redline/plugins/redline ~/.claude/skills/
+```
+
+On the next session it appears in `/plugin` as `redline@skills-dir` and can be
+enabled/disabled from there. To remove it, delete the folder.
+
+**Option B — via the marketplace (good for sharing with a team).**
+
+```bash
+/plugin marketplace add michail-nikolaev/redline   # straight from GitHub, no clone needed
+/plugin install redline@redline
+```
+
+(`redline` is the marketplace name from `.claude-plugin/marketplace.json`.)
+
+To enable / disable later, open `/plugin` and toggle it, or edit
+`enabledPlugins` in the relevant `settings.json` (user / project / local scope).
+Quick test without installing: `claude --plugin-dir ./plugins/redline`.
+
+### 2. Set up the status line (optional)
+
+The hooks work on their own, but the [status line](#status-line) gives you a
+live, at-a-glance view of your pending manual edits in the status bar. A plugin
+can't register the main status line itself, so run the bundled command once:
+
+```text
+/redline-statusline install            # user scope (~/.claude/settings.json)
+/redline-statusline install --project  # project scope (./.claude/settings.json)
+```
+
+See [Setting it up](#setting-it-up) for the full set of options.
+
 ## How it works
 
 An agent turn is one "tick". The plugin hooks the boundaries of each tick:
@@ -223,36 +265,6 @@ and the status line always operate on the *same* worktree. Snapshots use the
 per-worktree index (via `git rev-parse --git-path index`), and `HEAD`-move
 detection reads the worktree's own `HEAD`. Each worktree session has its own
 `session_id`, so their state never collides.
-
-## Install
-
-### Option A — skills-directory plugin (simplest, has a toggle)
-
-Clone the repo and drop the plugin folder into your skills directory; it is
-picked up with no marketplace step:
-
-```bash
-git clone https://github.com/michail-nikolaev/redline.git
-cp -r redline/plugins/redline ~/.claude/skills/
-```
-
-On the next session it appears in `/plugin` as `redline@skills-dir`
-and can be enabled/disabled from there. To remove it, delete the folder.
-
-### Option B — via the marketplace (good for sharing with a team)
-
-```bash
-/plugin marketplace add michail-nikolaev/redline   # straight from GitHub, no clone needed
-/plugin install redline@redline
-```
-
-(`redline` is the marketplace name from `.claude-plugin/marketplace.json`.)
-
-### Enable / disable
-
-Open `/plugin` and toggle it, or edit `enabledPlugins` in the relevant
-`settings.json` (user / project / local scope). Quick test without installing:
-`claude --plugin-dir ./plugins/redline`.
 
 ## Configuration
 
