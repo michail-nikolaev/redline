@@ -228,11 +228,12 @@ detection reads the worktree's own `HEAD`. Each worktree session has its own
 
 ### Option A — skills-directory plugin (simplest, has a toggle)
 
-Drop the plugin folder into your skills directory; it is picked up with no
-marketplace step:
+Clone the repo and drop the plugin folder into your skills directory; it is
+picked up with no marketplace step:
 
 ```bash
-cp -r plugins/redline ~/.claude/skills/
+git clone https://github.com/michail-nikolaev/redline.git
+cp -r redline/plugins/redline ~/.claude/skills/
 ```
 
 On the next session it appears in `/plugin` as `redline@skills-dir`
@@ -241,7 +242,7 @@ and can be enabled/disabled from there. To remove it, delete the folder.
 ### Option B — via the marketplace (good for sharing with a team)
 
 ```bash
-/plugin marketplace add /absolute/path/to/this/repo
+/plugin marketplace add michail-nikolaev/redline   # straight from GitHub, no clone needed
 /plugin install redline@redline
 ```
 
