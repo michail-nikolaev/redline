@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tool versions
+        run: |
+          bash --version | head -1
+          git --version
+          jq --version
+
+      - name: Run tests
+        run: bash tests/run.sh
+
+  lint:
+    name: ShellCheck & JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck (errors fail the build)
+        run: |
+          shellcheck --version
+          # -x follows sourced lib.sh; severity=error keeps style/info advisory
+          shellcheck -x --severity=error \
+            plugins/redline/hooks/*.sh \
+            plugins/redline/scripts/*.sh \
+            tests/*.sh
+
+      - name: Validate JSON manifests
+        run: |
+          for f in .claude-plugin/marketplace.json \
+                   plugins/redline/.claude-plugin/plugin.json \
+                   plugins/redline/hooks/hooks.json; do
+            echo "checking $f"
+            jq -e . "$f" > /dev/null
+          done
