@@ -46,8 +46,14 @@ SNAP="$STATE/$SID.snap"
 # turn and freezes the moment the agent goes idle. Each tick we refresh the
 # marker's mtime when that counter advances (and on the first tick of a turn). If
 # the marker then hasn't been refreshed within REDLINE_STATUS_BUSY_TTL seconds
-# (default 20), the turn is idle/interrupted and we fall through to the diff.
+# (default 40), the turn is idle/interrupted and we fall through to the diff.
 # Set REDLINE_STATUS_WORKING="" to show nothing at all while working.
+#
+# That heartbeat freezes during a long-running Bash command (a build, test run,
+# clone) because no model calls happen — so we ALSO treat a live Bash tool
+# command as activity (cc_command_running): while one runs we keep the marker
+# fresh, and when it is interrupted the killed process vanishes so we self-heal
+# via the same TTL. See lib.sh for how that command is detected.
 #
 # Tracking issue for a first-class interrupt/turn-end signal:
 #   https://github.com/anthropics/claude-code/issues/9516
@@ -57,9 +63,15 @@ if [ -f "$BUSY" ]; then
   case "$API" in ''|*[!0-9]*) API=0 ;; esac
   PREV="$(head -n1 "$BUSY" 2>/dev/null)"
   case "$PREV" in ''|*[!0-9]*) PREV=-1 ;; esac     # empty => freshly created -> init
-  [ "$API" -gt "$PREV" ] && printf '%s\n' "$API" > "$BUSY"   # activity (or init): refresh mtime
-  if [ "$(cc_file_age "$BUSY")" -lt "${REDLINE_STATUS_BUSY_TTL:-20}" ]; then
-    printf '%s' "${REDLINE_STATUS_WORKING-⏳ working…}"
+  # Refresh the marker on activity: either the API heartbeat advanced, OR a Bash
+  # tool command is still running (a long command => heartbeat frozen but not
+  # idle). touch (not rewrite) in the command case so we don't disturb the
+  # recorded counter on line 1 that the API-advance check above depends on.
+  if   [ "$API" -gt "$PREV" ]; then printf '%s\n' "$API" > "$BUSY"   # activity (or init)
+  elif cc_command_running;      then touch "$BUSY" 2>/dev/null || :   # long command still running
+  fi
+  if [ "$(cc_file_age "$BUSY")" -lt "${REDLINE_STATUS_BUSY_TTL:-40}" ]; then
+    printf '%s' "${REDLINE_STATUS_WORKING-⏳ agent turn…}"
     exit 0
   fi
 fi

@@ -18,7 +18,7 @@ assert_no_file "$STATE/sessions/$SID.busy" "no busy marker while idle"
 run_diff "$SID" "$R" >/dev/null
 assert_file "$STATE/sessions/$SID.busy" "UserPromptSubmit set busy marker"
 WORK="$(run_status "$SID" "$R")"
-assert_contains "$WORK" "working" "working: shows working marker"
+assert_contains "$WORK" "agent turn" "working: shows working marker"
 assert_not_contains "$WORK" "f.txt" "working: file list hidden"
 
 # REDLINE_STATUS_WORKING override (empty hides entirely)
@@ -47,23 +47,55 @@ BUSY="$STATE/sessions/$SID.busy"
 
 # first tick with some API time -> working; marker records that api duration
 W1="$(run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":1000}}')"
-assert_contains "$W1" "working" "api activity: working on first tick"
+assert_contains "$W1" "agent turn" "api activity: working on first tick"
 assert_eq "1000" "$(head -n1 "$BUSY")" "marker records last api duration"
 
 # marker is stale, but API time ADVANCED -> refresh -> still working
 backdate "$BUSY" 600
 W2="$(run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')"
-assert_contains "$W2" "working" "api advanced: marker refreshed, still working"
+assert_contains "$W2" "agent turn" "api advanced: marker refreshed, still working"
 
 # marker stale and API time UNCHANGED (interrupted) -> idle, manual diff returns
 backdate "$BUSY" 600
 IDLE="$(run_status_plain "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')"
-assert_not_contains "$IDLE" "working" "api frozen (interrupt): not stuck on working"
+assert_not_contains "$IDLE" "agent turn" "api frozen (interrupt): not stuck on working"
 assert_contains "$IDLE" "f.txt" "api frozen (interrupt): manual diff shown again"
 
 # TTL is configurable
 backdate "$BUSY" 3
 assert_contains "$(REDLINE_STATUS_BUSY_TTL=1 run_status_plain "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')" "f.txt" "low TTL expires busy quickly"
-assert_contains "$(REDLINE_STATUS_BUSY_TTL=60 run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')" "working" "high TTL keeps busy active"
+assert_contains "$(REDLINE_STATUS_BUSY_TTL=60 run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')" "agent turn" "high TTL keeps busy active"
+
+# --- long-running command keeps "working" past the TTL (process-liveness) ------
+# A long Bash command makes no model calls, so cost.total_api_duration_ms is
+# frozen and the heartbeat alone would expire the marker. cc_command_running
+# detects the live command directly and keeps the marker fresh; when the command
+# ends (or is interrupted and killed) it vanishes and we self-heal via the TTL.
+# statusline.sh resolves the command via `pgrep -P $PPID`, so it must share a
+# parent with the fake command: invoke run_status DIRECTLY here (its pipeline's
+# `bash statusline.sh` is then a child of this test shell, as is the fake), not
+# inside $() (which would reparent it under the command-substitution subshell).
+if command -v pgrep >/dev/null 2>&1; then
+  PAT="redline-test-livecmd"
+  OUT="$STATE/statusout"
+  run_snapshot "$SID" "$R" >/dev/null
+  printf 'x\ny\nz\nq\n' > "$R/f.txt"
+  run_diff "$SID" "$R" >/dev/null                 # busy created (empty)
+  BUSY="$STATE/sessions/$SID.busy"
+  run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":5000}}' >/dev/null   # seed recorded api=5000
+
+  # marker stale + API frozen, but a command is live -> stays working
+  backdate "$BUSY" 600
+  spawn_fake_command "$PAT"
+  REDLINE_BUSY_CMD_PATTERN="$PAT" run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":5000}}' > "$OUT"
+  assert_contains "$(cat "$OUT")" "agent turn" "live command: working past TTL while command runs"
+
+  # command ended/interrupted + marker stale + API frozen -> diff returns
+  kill_fake_command
+  backdate "$BUSY" 600
+  assert_contains "$(REDLINE_BUSY_CMD_PATTERN="$PAT" run_status_plain "$SID" "$R" '{"cost":{"total_api_duration_ms":5000}}')" "f.txt" "command ended: diff returns (self-heals via TTL)"
+else
+  printf '  (skip: pgrep unavailable — process-liveness tests)\n'
+fi
 
 t_summary

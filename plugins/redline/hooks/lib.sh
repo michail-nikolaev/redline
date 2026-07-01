@@ -75,6 +75,22 @@ cc_file_age() {
   printf '%s' "$(( now - m ))"
 }
 
+# Is a Bash *tool* command currently running for THIS session? Claude Code runs
+# each Bash tool command as a direct child of the session's process (our $PPID)
+# that sources a shell snapshot; hooks and the status line are invoked as plain
+# `bash <script>` and lack that signature, so they never self-match. Used by the
+# status line to stay "working" during a long command that makes no model calls
+# (so cost.total_api_duration_ms is frozen and the heartbeat alone would expire).
+#
+# Fail-safe: if pgrep is missing this returns non-zero and the caller falls back
+# to the heartbeat/TTL (today's behavior). The snapshot-bash signature is a
+# Claude Code internal; override REDLINE_BUSY_CMD_PATTERN if it ever changes.
+# Keep any override a plain literal (it is a pgrep -f regex).
+cc_command_running() {
+  command -v pgrep >/dev/null 2>&1 || return 1
+  pgrep -P "$PPID" -f "${REDLINE_BUSY_CMD_PATTERN:-shell-snapshots/snapshot-bash}" >/dev/null 2>&1
+}
+
 # Session id — the basis for multi-session safety. Every Claude Code session
 # gets its own session_id, so snapshots from different sessions never clobber
 # each other. Fallback (if the field is missing) is a hash of the project path.

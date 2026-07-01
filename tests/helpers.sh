@@ -96,3 +96,20 @@ backdate(){ # file seconds_ago
   touch -d "@$epoch" "$f" 2>/dev/null && return       # GNU coreutils
   touch -t "$(date -r "$epoch" +%Y%m%d%H%M.%S)" "$f"  # BSD/macOS
 }
+
+# Simulate a live Bash *tool* command for cc_command_running. The status line
+# resolves it via `pgrep -P $PPID -f <pattern>`, and $PPID inside the script is
+# THIS test shell (run_status pipes into `bash statusline.sh`, a child of us), so
+# the fake must be a background child of this shell too. exec -a puts the marker
+# in the process's argv where `pgrep -f` matches it. Drive matching with a
+# bespoke REDLINE_BUSY_CMD_PATTERN so tests never depend on real Claude Code
+# internals. Call these directly (NOT in a $() subshell) so FAKE_CMD_PID sticks.
+FAKE_CMD_PID=""
+spawn_fake_command(){ # marker
+  ( exec -a "$1 sleep" sleep 30 ) & FAKE_CMD_PID=$!
+}
+kill_fake_command(){
+  [ -n "$FAKE_CMD_PID" ] && kill "$FAKE_CMD_PID" 2>/dev/null
+  wait "$FAKE_CMD_PID" 2>/dev/null || true
+  FAKE_CMD_PID=""
+}
