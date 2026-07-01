@@ -14,30 +14,17 @@ prompt carries a diff of exactly what you changed into Claude's context.
 
 ## Install
 
-**Option A — via the marketplace (good for sharing with a team).**
-
 ```bash
 /plugin marketplace add michail-nikolaev/redline
 /plugin install redline@redline
 ```
 
-To enable/disable later, open `/plugin` and toggle it. Quick test without
-installing: `claude --plugin-dir ./plugins/redline`.
-
-**Option B — skills-directory plugin (simplest, has a toggle).**
-
-```bash
-git clone https://github.com/michail-nikolaev/redline.git
-cp -r redline/plugins/redline ~/.claude/skills/
-```
-
-On the next session it appears in `/plugin` as `redline@skills-dir` and can be
-enabled/disabled from there. To remove it, delete the folder.
+To enable/disable later, open `/plugin` and toggle it.
 
 **Optional: status line.** The hooks work on their own, but a bundled command
 can also add a status-bar view of your pending manual edits:
 
-```text
+```bash
 /redline-statusline install
 ```
 
