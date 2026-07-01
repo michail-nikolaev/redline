@@ -88,3 +88,11 @@ commit_all(){ # dir msg
   git -C "$1" add -A
   git -C "$1" commit -q -m "$2"
 }
+
+# Set a file's mtime to N seconds in the past. Portable across GNU and BSD/macOS
+# touch: GNU accepts `-d @epoch`; BSD rejects it and needs `-t CCYYMMDDhhmm.SS`.
+backdate(){ # file seconds_ago
+  local f="$1" epoch; epoch=$(( $(date +%s) - $2 ))
+  touch -d "@$epoch" "$f" 2>/dev/null && return       # GNU coreutils
+  touch -t "$(date -r "$epoch" +%Y%m%d%H%M.%S)" "$f"  # BSD/macOS
+}

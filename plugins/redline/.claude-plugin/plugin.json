@@ -1,6 +1,6 @@
 {
   "name": "redline",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Feeds your manual working-tree edits made between agent turns back to Claude as a git diff, and shows them live in the status bar. Safe for multiple concurrent sessions.",
   "author": {
     "name": "Mikhail Nikalayeu"

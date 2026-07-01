@@ -51,18 +51,18 @@ assert_contains "$W1" "working" "api activity: working on first tick"
 assert_eq "1000" "$(head -n1 "$BUSY")" "marker records last api duration"
 
 # marker is stale, but API time ADVANCED -> refresh -> still working
-touch -d "@$(( $(date +%s) - 600 ))" "$BUSY"
+backdate "$BUSY" 600
 W2="$(run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')"
 assert_contains "$W2" "working" "api advanced: marker refreshed, still working"
 
 # marker stale and API time UNCHANGED (interrupted) -> idle, manual diff returns
-touch -d "@$(( $(date +%s) - 600 ))" "$BUSY"
+backdate "$BUSY" 600
 IDLE="$(run_status_plain "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')"
 assert_not_contains "$IDLE" "working" "api frozen (interrupt): not stuck on working"
 assert_contains "$IDLE" "f.txt" "api frozen (interrupt): manual diff shown again"
 
 # TTL is configurable
-touch -d "@$(( $(date +%s) - 3 ))" "$BUSY"
+backdate "$BUSY" 3
 assert_contains "$(REDLINE_STATUS_BUSY_TTL=1 run_status_plain "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')" "f.txt" "low TTL expires busy quickly"
 assert_contains "$(REDLINE_STATUS_BUSY_TTL=60 run_status "$SID" "$R" '{"cost":{"total_api_duration_ms":2000}}')" "working" "high TTL keeps busy active"
 
