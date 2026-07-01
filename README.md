@@ -25,6 +25,10 @@ To enable/disable later, open `/plugin` and toggle it.
 can also add a status-bar view of your pending manual edits:
 
 ```bash
+/redline:redline-statusline install
+```
+or in case of local installation
+```bash
 /redline-statusline install
 ```
 
