@@ -5,7 +5,7 @@
     {
       "name": "redline",
       "source": "./plugins/redline",
-      "description": "Feeds your between-turn manual edits back to Claude as a diff, with a live status-line view (multi-session safe)."
+      "description": "Feeds your between-turn manual edits back to Claude as a diff, with a live status-line view."
     }
   ]
 }
