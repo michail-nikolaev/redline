@@ -6,6 +6,12 @@ edits when they happen to re-read a file — redline makes it explicit and
 proactive: whenever you edit files yourself between the agent's turns, the next
 prompt carries a diff of exactly what you changed into Claude's context.
 
+<img width="746" height="348" alt="image" src="https://github.com/user-attachments/assets/c0517a14-859a-47ac-a865-4ceadd8f2a4b" />
+
+<img width="1891" height="548" alt="image" src="https://github.com/user-attachments/assets/0023d24b-1a16-4314-9322-8c2470f7b288" />
+
+
+
 ## Install
 
 **Option A — via the marketplace (good for sharing with a team).**
