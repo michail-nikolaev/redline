@@ -45,18 +45,32 @@ stderr and goes inactive — it never breaks your session.
 An agent turn is one "tick". The plugin hooks the boundaries of each tick:
 
 - **`SessionStart`** — snapshot the working tree (baseline for the first turn).
+  Compaction (`source: compact`) is deliberately ignored — it is not a turn
+  boundary, so edits pending at that moment survive it.
 - **`Stop`** — snapshot at the end of every agent turn (the state it stopped at).
+- **`PostToolUse`** — re-snapshot after each file-touching tool call, so the
+  baseline follows the agent *through* the turn. If you interrupt a turn with
+  Esc (which fires no `Stop`), the agent's own edits are still baselined and
+  never come back misattributed as yours.
 - **`UserPromptSubmit`** — before the next turn, compare the current tree with
   the snapshot and put the difference into Claude's context. Silent if you
   changed nothing.
 - **`SessionEnd`** — clean up this session's snapshot.
 
-Snapshots are taken as a git tree object through a throwaway `GIT_INDEX_FILE`,
+Snapshots are taken as a git tree object through a private `GIT_INDEX_FILE`,
 so your index, stash, and working files are never touched, and `.gitignore` is
-honored. The comparison is against the snapshot from the **end of the agent's
-turn**, so the diff contains your edits, not Claude's — a branch switch,
-`reset`, or `commit` moves `HEAD` instead, which the plugin detects and treats
-as a re-baseline rather than a manual edit.
+honored. The objects a snapshot creates are routed to a private per-session
+store under the state directory (`GIT_OBJECT_DIRECTORY`, with your repo as a
+read-only alternate) — nothing is ever written into your `.git/objects`, and
+the store is deleted with the session. The comparison is against the snapshot
+from the **end of the agent's turn**, so the diff contains your edits, not
+Claude's — a branch switch, `reset`, or `commit` moves `HEAD` instead, which
+the plugin detects and treats as a re-baseline rather than a manual edit.
+
+On large repositories the recurring snapshots use git's untracked cache to
+skip full directory walks (disable with `REDLINE_UNTRACKED_CACHE=false` if
+your filesystem has unreliable directory mtimes); set `REDLINE_FSMONITOR=1`
+to additionally use git's builtin filesystem monitor daemon (git ≥ 2.37).
 
 The status line reuses this same snapshot read-only, so it always shows the
 same delta the next prompt would carry.

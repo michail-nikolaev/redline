@@ -65,6 +65,12 @@ SID="$(cc_session_id)"
 STATE="$(cc_state_dir)"
 SNAP="$STATE/$SID.snap"
 
+# Snapshot trees/blobs live in a private per-session object store, not in the
+# repo's .git/objects (see cc_object_env in lib.sh) — route git there before
+# any tree or diff work. Derived from the same payload fields the hooks use,
+# so both contexts reach the same store.
+cc_object_env "$PROJ" "$STATE/$SID.objects" || true
+
 # No baseline yet (session predates the plugin, or no turn has ended). Stay
 # silent rather than creating one — only the snapshot hooks may write it.
 [ -f "$SNAP" ] || exit 0

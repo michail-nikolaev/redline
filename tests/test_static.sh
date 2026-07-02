@@ -19,7 +19,7 @@ assert_eq "redline" "$(jq -r .name "$PLUGIN/.claude-plugin/plugin.json")" "plugi
 assert_nonempty "$(jq -r .version "$PLUGIN/.claude-plugin/plugin.json")" "plugin.json version present"
 
 # hooks.json wires the lifecycle events
-for ev in SessionStart Stop UserPromptSubmit SessionEnd; do
+for ev in SessionStart Stop UserPromptSubmit PostToolUse SessionEnd; do
   assert_eq "true" "$(jq --arg e "$ev" 'has("hooks") and (.hooks|has($e))' "$HOOKS/hooks.json")" "hooks.json wires $ev"
 done
 

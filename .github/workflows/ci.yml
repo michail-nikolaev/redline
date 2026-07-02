@@ -38,8 +38,8 @@ jobs:
       - name: ShellCheck (errors fail the build)
         run: |
           shellcheck --version
-          # -x follows sourced lib.sh; severity=error keeps style/info advisory
-          shellcheck -x --severity=error \
+          # -x follows sourced lib.sh; severity=warning keeps style/info advisory
+          shellcheck -x --severity=warning \
             plugins/redline/hooks/*.sh \
             plugins/redline/scripts/*.sh \
             tests/*.sh

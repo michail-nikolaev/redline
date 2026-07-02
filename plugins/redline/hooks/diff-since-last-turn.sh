@@ -21,6 +21,7 @@ cc_in_git "$PROJ" || exit 0
 SID="$(cc_session_id)"
 STATE="$(cc_state_dir)"
 SNAP="$STATE/$SID.snap"
+cc_object_env "$PROJ" "$STATE/$SID.objects" || true
 
 # A turn is starting => the (main) agent is now working. Mark it busy; Stop /
 # SessionStart clear it. The status line uses this to hide the file list while
@@ -28,6 +29,11 @@ SNAP="$STATE/$SID.snap"
 # in-progress edits, not your manual ones. (Subagents were excluded above, so
 # this only ever tracks the top-level agent.)
 : > "$STATE/$SID.busy" 2>/dev/null || true
+
+# Drop the PostToolUse hook's persistent per-turn index so it re-seeds from the
+# repo's real index on the first tool call of this turn. This bounds any drift
+# between its tracked-file set and the real one to a single turn.
+rm -f "$STATE/$SID.turn.idx" 2>/dev/null || true
 
 # No baseline yet (e.g. the plugin was enabled mid-session): set the baseline
 # now and stay silent — diffing starts working from the next turn.
@@ -55,13 +61,27 @@ fi
 STAT="$(cd "$PROJ" && git diff --stat "$OLD_TREE" "$NEW_TREE" 2>/dev/null)"
 [ -n "$STAT" ] || exit 0   # the user changed nothing — stay silent
 
+# Cap the diff we inject. Read one byte past the cap so "fits exactly" and
+# "was cut" are distinguishable, and mark the diff as truncated ONLY when it
+# actually was — a permanent "(truncated)" label makes the model assume context
+# is missing. When we do cut, drop the partial last line too, so the model
+# never sees a mangled hunk or a split multi-byte character; the --stat list
+# above the diff stays complete either way.
 MAX_BYTES="${REDLINE_MAX_BYTES:-20000}"
-FULL="$(cd "$PROJ" && git diff "$OLD_TREE" "$NEW_TREE" 2>/dev/null | head -c "$MAX_BYTES")"
+FULL="$(cd "$PROJ" && git diff "$OLD_TREE" "$NEW_TREE" 2>/dev/null | head -c "$((MAX_BYTES + 1))")"
+if [ "$(printf '%s' "$FULL" | wc -c)" -gt "$MAX_BYTES" ]; then
+  FULL="$(printf '%s' "$FULL" | head -c "$MAX_BYTES")"
+  CUT="${FULL%$'\n'*}"           # cut at the last complete line…
+  [ -n "$CUT" ] && FULL="$CUT"   # …unless the cap landed inside the first line
+  DIFF_HEAD="Diff (truncated at ${MAX_BYTES} bytes; the file list above is complete):"
+else
+  DIFF_HEAD="Diff:"
+fi
 
 # What Claude receives. Stated as plain fact, no imperative — otherwise
 # prompt-injection defenses can trigger and Claude surfaces this to the user
 # instead of using it as context.
-CONTEXT="$(printf '[redline] The user manually edited files in the working tree since the assistant'\''s previous turn.\n\nChanged files:\n%s\n\nDiff (truncated to %s bytes):\n```diff\n%s\n```' "$STAT" "$MAX_BYTES" "$FULL")"
+CONTEXT="$(printf '[redline] The user manually edited files in the working tree since the assistant'\''s previous turn.\n\nChanged files:\n%s\n\n%s\n```diff\n%s\n```' "$STAT" "$DIFF_HEAD" "$FULL")"
 
 # Display mode controls what the *user* sees in the Claude Code interface:
 #   banner (default) — emit JSON: the full diff goes to Claude discreetly via

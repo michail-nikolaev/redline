@@ -34,4 +34,24 @@ run_snapshot "$SID" "$R" >/dev/null
 printf 'a\nb\nc\nd\ne\n' > "$R/f.txt"; commit_all "$R" c2      # HEAD moves
 assert_empty "$(run_diff "$SID" "$R")" "HEAD move: silent (no inter-branch delta injected)"
 
+# Truncation is honest: no marker on a small diff…
+run_snapshot "$SID" "$R" >/dev/null
+printf 'small\n' >> "$R/f.txt"
+CTX="$(run_diff "$SID" "$R" | jq -r '.hookSpecificOutput.additionalContext')"
+assert_not_contains "$CTX" "truncated" "small diff carries no truncation marker"
+
+# …marker + line-boundary cut when the cap actually bites
+run_snapshot "$SID" "$R" >/dev/null
+seq 1 500 | sed 's/.*/line-&-endmark/' > "$R/big.txt"
+CTX="$(REDLINE_MAX_BYTES=300 run_diff "$SID" "$R" | jq -r '.hookSpecificOutput.additionalContext')"
+assert_contains "$CTX" "truncated at 300 bytes" "big diff carries the truncation marker"
+DIFFPART="$(printf '%s\n' "$CTX" | sed -n '/^```diff$/,/^```$/p' | sed '1d;$d')"
+assert_eq "yes" "$([ "$(printf '%s' "$DIFFPART" | wc -c)" -le 300 ] && echo yes || echo no)" \
+  "truncated diff stays within the byte budget"
+case "$(printf '%s\n' "$DIFFPART" | tail -n1)" in
+  *-endmark|@@*) pass "truncated diff ends on a complete line" ;;
+  *)             fail "truncated diff ends on a complete line" "got [$(printf '%s\n' "$DIFFPART" | tail -n1)]" ;;
+esac
+rm -f "$R/big.txt"
+
 t_summary

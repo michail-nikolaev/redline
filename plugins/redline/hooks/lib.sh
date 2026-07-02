@@ -100,6 +100,30 @@ cc_session_id() {
   printf '%s' "$(cc_project_dir)" | cksum | cut -d' ' -f1
 }
 
+# Route the objects our snapshots create AWAY from the repo. `git add -A` +
+# `write-tree` store real blob/tree objects; without redirection every snapshot
+# (each turn, each tool call, each status tick that sees a new tree) would salt
+# the user's .git/objects with unreferenced loose objects until gc prunes them.
+# GIT_OBJECT_DIRECTORY makes git write (and read) objects in a private
+# per-session dir under our state dir; GIT_ALTERNATE_OBJECT_DIRECTORIES keeps
+# every existing repo object readable. The path derives from session_id + state
+# dir only — both already resolve identically in hooks and the statusLine
+# command (same stdin payload fields), so the two contexts reach the same store
+# with no handoff. The real objects path MUST be captured before the export:
+# with GIT_OBJECT_DIRECTORY set, `--git-path objects` would return our own dir.
+# On failure we leave the env unset and git writes into the repo — merely the
+# old behavior. $1 = project root, $2 = private object dir.
+cc_object_env() {
+  local proj="$1" objdir="$2" real
+  [ -n "${GIT_OBJECT_DIRECTORY:-}" ] && return 0   # already routed
+  real="$(cd "$proj" 2>/dev/null && git rev-parse --git-path objects 2>/dev/null)"
+  [ -n "$real" ] || return 1
+  case "$real" in /*) ;; *) real="$proj/$real" ;; esac
+  mkdir -p "$objdir" 2>/dev/null || return 1
+  export GIT_OBJECT_DIRECTORY="$objdir"
+  export GIT_ALTERNATE_OBJECT_DIRECTORIES="$real"
+}
+
 # Seed an index file from the repo's REAL index when it is empty/missing. Run
 # inside the project dir. This matters for consistency: an empty index makes
 # `git add -A` treat tracked-but-gitignored files (e.g. a committed .idea/ that
@@ -147,7 +171,15 @@ cc_snapshot_tree_warm() {
   ( cd "$proj" 2>/dev/null || exit 0
     git rev-parse --git-dir >/dev/null 2>&1 || exit 0
     cc_seed_index "$idx"
-    GIT_INDEX_FILE="$idx" git add -A 2>/dev/null || exit 0
+    # The untracked cache lives inside this persistent index, so it survives
+    # across calls and spares git the full directory walk for untracked files.
+    # REDLINE_UNTRACKED_CACHE=false opts out (e.g. filesystems with unreliable
+    # directory mtimes). REDLINE_FSMONITOR=1 additionally uses git's builtin
+    # filesystem-monitor daemon (git >= 2.37) so unchanged subtrees are not
+    # even stat()ed — opt-in, since it starts a per-repo daemon.
+    set -- -c "core.untrackedCache=${REDLINE_UNTRACKED_CACHE:-true}"
+    [ -n "${REDLINE_FSMONITOR:-}" ] && set -- "$@" -c core.fsmonitor=true
+    GIT_INDEX_FILE="$idx" git "$@" add -A 2>/dev/null || exit 0
     GIT_INDEX_FILE="$idx" git write-tree 2>/dev/null
   )
 }
@@ -161,13 +193,30 @@ cc_head() {
   [ -n "$h" ] && printf '%s' "$h" || printf 'NOHEAD'
 }
 
-# Write the session baseline: line 1 = HEAD, line 2 = tree.
+# Write the session baseline: line 1 = HEAD, line 2 = tree. Written via a temp
+# file + rename so a concurrent reader (the status line ticks every few seconds,
+# and PostToolUse rewrites the baseline many times per turn) never sees a
+# half-written file.
 # $1 = project, $2 = snapshot file path, $3 = temp index path.
 cc_write_snapshot() {
   local proj="$1" snap="$2" idx="$3" tree
   tree="$(cc_snapshot_tree "$proj" "$idx")"
   [ -n "$tree" ] || return 1
-  printf '%s\n%s\n' "$(cc_head "$proj")" "$tree" > "$snap"
+  printf '%s\n%s\n' "$(cc_head "$proj")" "$tree" > "$snap.tmp.$$" \
+    && mv -f "$snap.tmp.$$" "$snap"
+}
+
+# Same, but through the warm/persistent-index helper. For the PostToolUse hook,
+# which runs after every file-touching tool call and cannot afford a cold
+# re-hash; its index is dropped once per turn at UserPromptSubmit (see
+# diff-since-last-turn.sh), which bounds tracked-set drift to a single turn —
+# the same guarantee the status line's persistent index has.
+cc_write_snapshot_warm() {
+  local proj="$1" snap="$2" idx="$3" tree
+  tree="$(cc_snapshot_tree_warm "$proj" "$idx")"
+  [ -n "$tree" ] || return 1
+  printf '%s\n%s\n' "$(cc_head "$proj")" "$tree" > "$snap.tmp.$$" \
+    && mv -f "$snap.tmp.$$" "$snap"
 }
 
 # Are we running inside a subagent (Task tool)? Only agent_id is reliable here:
