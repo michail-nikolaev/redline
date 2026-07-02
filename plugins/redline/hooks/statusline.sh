@@ -21,6 +21,43 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cc_require_jq
 cc_read_input
 
+# ── Debug mode ───────────────────────────────────────────────────────────────
+# When REDLINE_STATUS_DEBUG is set to anything non-empty, short-circuit the
+# normal render and print diagnostics instead. Two purposes:
+#   1. A fresh random number every invocation ("tick #NNNNN"), so you can SEE the
+#      status line is actually being called, and how often — the real output is
+#      usually empty (clean tree) or served from cache, so a live status line is
+#      otherwise indistinguishable from a dead/misconfigured one.
+#   2. A dump of the exact stdin payload Claude Code handed us, plus the values we
+#      derive from it (project dir, session id, state paths, whether the snapshot
+#      / busy markers exist), so you can see why it renders what it does.
+# Kept DENSE — a summary line, the derived paths, then the whole payload compacted
+# onto one line (jq -c). All rows are sized to COLUMNS (which Claude Code exports
+# to the script; see the main render below): the summary/paths rows are CLIPPED,
+# tail-marked with … (their tails are decorative or derivable), while the payload
+# is WRAPPED onto as many COLUMNS-wide rows as it needs, so no field is ever lost.
+# This runs before any git or snapshot work, so it reports even outside a repo or
+# before the first baseline exists. Everything is printed as ordinary status rows.
+if [ -n "${REDLINE_STATUS_DEBUG:-}" ]; then
+  _PROJ="$(cc_project_dir)"
+  _SID="$(cc_session_id)"
+  _STATE="$(cc_state_dir)"
+  _COLS="${COLUMNS:-80}"; case "$_COLS" in ''|*[!0-9]*) _COLS=80 ;; esac
+  [ "$_COLS" -ge 10 ] || _COLS=10
+  # Clip to _COLS chars, appending … when truncated (so the row is at most _COLS).
+  _clip() { local s="$1"; if [ "${#s}" -gt "$_COLS" ]; then printf '%s…\n' "${s:0:_COLS-1}"; else printf '%s\n' "$s"; fi; }
+  # Wrap onto successive _COLS-wide rows instead of truncating — loses no data.
+  _fold() { local s="$1"; while [ "${#s}" -gt "$_COLS" ]; do printf '%s\n' "${s:0:_COLS}"; s="${s:_COLS}"; done; printf '%s\n' "$s"; }
+  _clip "$(printf '🔎 redline debug · tick #%s · git:%s snap:%s busy:%s' \
+    "$RANDOM" \
+    "$(cc_in_git "$_PROJ" && echo yes || echo no)" \
+    "$([ -f "$_STATE/$_SID.snap" ] && echo present || echo none)" \
+    "$([ -f "$_STATE/$_SID.busy" ] && echo present || echo none)")"
+  _clip "sid=$_SID dir=$_PROJ state=$_STATE"
+  _fold "$(printf '%s' "${CC_INPUT:-}" | jq -c . 2>/dev/null || printf '%s' "${CC_INPUT:-(empty)}")"
+  exit 0
+fi
+
 PROJ="$(cc_project_dir)"
 cc_in_git "$PROJ" || exit 0
 
